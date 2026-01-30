@@ -20,7 +20,8 @@ export function ImageBlock({ block, onDelete, canDelete }: ImageBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const { user } = useAuth();
   const isSarru = user?.username === 'sarru';
-  const canDeleteImage = canDelete && isSarru;
+  // sarru can always delete images, regardless of edit mode
+  const canDeleteImage = isSarru;
 
   const handleDownload = async () => {
     try {
