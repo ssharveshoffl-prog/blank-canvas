@@ -1,0 +1,141 @@
+import { useState } from 'react';
+import { Photo } from '@/lib/gallery';
+import { cn } from '@/lib/utils';
+import { Maximize2, FolderPlus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogClose,
+} from '@/components/ui/dialog';
+import { X } from 'lucide-react';
+
+interface PhotoGridProps {
+  photos: Photo[];
+  onAddToAlbum?: (photo: Photo) => void;
+  showAddToAlbum?: boolean;
+}
+
+export function PhotoGrid({ photos, onAddToAlbum, showAddToAlbum = true }: PhotoGridProps) {
+  const [expandedPhoto, setExpandedPhoto] = useState<Photo | null>(null);
+
+  if (photos.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-secondary/50 flex items-center justify-center">
+          <span className="text-3xl">📷</span>
+        </div>
+        <h3 className="font-serif text-lg text-foreground mb-2">No photos yet</h3>
+        <p className="text-sm text-muted-foreground">
+          Photos added to entries will appear here
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        {photos.map((photo) => (
+          <div
+            key={photo.id}
+            className={cn(
+              "group relative aspect-square overflow-hidden rounded-xl",
+              "bg-secondary/30 cursor-pointer",
+              "transition-gentle hover:shadow-warm"
+            )}
+            onClick={() => setExpandedPhoto(photo)}
+          >
+            <img
+              src={photo.content}
+              alt={photo.name}
+              className={cn(
+                "w-full h-full object-cover",
+                "transition-gentle group-hover:scale-105"
+              )}
+              loading="lazy"
+            />
+
+            {/* Hover overlay */}
+            <div className={cn(
+              "absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent",
+              "opacity-0 group-hover:opacity-100 transition-gentle"
+            )}>
+              {/* Action buttons */}
+              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+                <p className="text-xs text-white/90 font-sans truncate max-w-[60%]">
+                  {photo.entryTitle !== '__gallery__' ? photo.entryTitle : 'Gallery'}
+                </p>
+                <div className="flex gap-1">
+                  {showAddToAlbum && onAddToAlbum && (
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="w-7 h-7 bg-white/20 backdrop-blur-sm hover:bg-white/40 border-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddToAlbum(photo);
+                      }}
+                    >
+                      <FolderPlus className="w-3.5 h-3.5 text-white" />
+                    </Button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="w-7 h-7 bg-white/20 backdrop-blur-sm hover:bg-white/40 border-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedPhoto(photo);
+                    }}
+                  >
+                    <Maximize2 className="w-3.5 h-3.5 text-white" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Fullscreen photo dialog */}
+      <Dialog open={!!expandedPhoto} onOpenChange={() => setExpandedPhoto(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-background/95 backdrop-blur-md border-border">
+          <DialogClose className="absolute right-4 top-4 z-10 rounded-full p-2 bg-background/80 hover:bg-background transition-gentle">
+            <X className="h-5 w-5" />
+          </DialogClose>
+          
+          {/* Add to album button in fullscreen */}
+          {showAddToAlbum && onAddToAlbum && expandedPhoto && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                onAddToAlbum(expandedPhoto);
+              }}
+              className="absolute left-4 top-4 z-10 bg-background/80 hover:bg-background transition-gentle"
+            >
+              <FolderPlus className="w-4 h-4 mr-2" />
+              Add to album
+            </Button>
+          )}
+
+          <div className="flex flex-col items-center justify-center p-4 max-h-[95vh] overflow-auto">
+            {expandedPhoto && (
+              <>
+                <img
+                  src={expandedPhoto.content}
+                  alt={expandedPhoto.name}
+                  className="max-w-full max-h-[85vh] object-contain rounded-lg"
+                />
+                <p className="mt-3 text-sm text-muted-foreground font-sans">
+                  From: {expandedPhoto.entryTitle !== '__gallery__' ? expandedPhoto.entryTitle : 'Gallery'}
+                </p>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
