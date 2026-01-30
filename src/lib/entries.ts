@@ -40,9 +40,9 @@ export interface Entry {
   createdAt: string;
   updatedAt: string;
   createdBy: string;
+  position: number;
 }
 
-// Database types
 interface DbEntry {
   id: string;
   title: string;
@@ -50,6 +50,7 @@ interface DbEntry {
   created_by: string;
   created_at: string;
   updated_at: string;
+  position: number;
 }
 
 interface DbBlock {
@@ -72,6 +73,7 @@ function transformEntry(dbEntry: DbEntry, blocks: Block[]): Entry {
     createdAt: dbEntry.created_at,
     updatedAt: dbEntry.updated_at,
     createdBy: dbEntry.created_by,
+    position: dbEntry.position ?? 0,
   };
 }
 
@@ -118,7 +120,8 @@ export async function getEntries(): Promise<Entry[]> {
   const { data: entries, error: entriesError } = await supabase
     .from('entries')
     .select('*')
-    .order('created_at', { ascending: false });
+    .neq('title', '__gallery__') // Exclude system gallery entry
+    .order('position', { ascending: true });
 
   if (entriesError) {
     console.error('Error fetching entries:', entriesError);
@@ -478,6 +481,58 @@ export async function deleteBlock(entryId: string, blockId: string): Promise<boo
 
   if (error) {
     console.error('Error deleting block:', error);
+    return false;
+  }
+
+  // Update entry's updated_at
+  await supabase
+    .from('entries')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', entryId);
+
+  return true;
+}
+
+// Update entry positions (for drag & drop reordering)
+export async function updateEntryPositions(
+  updates: { id: string; position: number }[]
+): Promise<boolean> {
+  // Update each entry's position
+  const promises = updates.map(({ id, position }) =>
+    supabase
+      .from('entries')
+      .update({ position })
+      .eq('id', id)
+  );
+
+  const results = await Promise.all(promises);
+  const hasError = results.some(r => r.error);
+
+  if (hasError) {
+    console.error('Error updating entry positions');
+    return false;
+  }
+
+  return true;
+}
+
+// Update block positions (for drag & drop reordering within an entry)
+export async function updateBlockPositions(
+  entryId: string,
+  updates: { id: string; position: number }[]
+): Promise<boolean> {
+  const promises = updates.map(({ id, position }) =>
+    supabase
+      .from('blocks')
+      .update({ position })
+      .eq('id', id)
+  );
+
+  const results = await Promise.all(promises);
+  const hasError = results.some(r => r.error);
+
+  if (hasError) {
+    console.error('Error updating block positions');
     return false;
   }
 

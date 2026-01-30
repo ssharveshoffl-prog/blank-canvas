@@ -1,14 +1,32 @@
 import { useState, useEffect } from 'react';
-import { Entry, getEntries } from '@/lib/entries';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { Entry, getEntries, updateEntryPositions } from '@/lib/entries';
 import { useAuth } from '@/contexts/AuthContext';
 import { EntryView } from '@/components/EntryView';
 import { CreateEntryModal } from '@/components/CreateEntryModal';
+import { DraggableEntryCard } from '@/components/DraggableEntryCard';
+import { GalleryPage } from '@/components/gallery/GalleryPage';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, LogOut, BookOpen, Loader2 } from 'lucide-react';
+import { Plus, LogOut, BookOpen, Loader2, Images } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
 import { InfinityMark } from '@/components/InfinityMark';
+
+type PageView = 'entries' | 'gallery';
 
 export function MainPage() {
   const { user, logout } = useAuth();
@@ -16,6 +34,18 @@ export function MainPage() {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [pageView, setPageView] = useState<PageView>('entries');
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const loadEntries = async () => {
     const data = await getEntries();
@@ -26,6 +56,25 @@ export function MainPage() {
   useEffect(() => {
     loadEntries();
   }, []);
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = entries.findIndex((e) => e.id === active.id);
+      const newIndex = entries.findIndex((e) => e.id === over.id);
+
+      const newEntries = arrayMove(entries, oldIndex, newIndex);
+      setEntries(newEntries);
+
+      // Update positions in database
+      const updates = newEntries.map((entry, index) => ({
+        id: entry.id,
+        position: index,
+      }));
+      await updateEntryPositions(updates);
+    }
+  };
 
   const handleEntryClick = (entry: Entry) => {
     setSelectedEntryId(entry.id);
@@ -47,6 +96,10 @@ export function MainPage() {
   const handleCreateEntry = () => {
     loadEntries();
   };
+
+  if (pageView === 'gallery') {
+    return <GalleryPage onClose={() => setPageView('entries')} />;
+  }
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -73,18 +126,29 @@ export function MainPage() {
             </Button>
           </div>
 
-          <Button
-            onClick={() => setIsCreateModalOpen(true)}
-            className={cn(
-              "w-full h-10 font-sans text-sm",
-              "bg-primary text-primary-foreground",
-              "hover:bg-primary/90",
-              "transition-gentle"
-            )}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            New Entry
-          </Button>
+          <div className="flex gap-2 mb-3">
+            <Button
+              onClick={() => setIsCreateModalOpen(true)}
+              className={cn(
+                "flex-1 h-10 font-sans text-sm",
+                "bg-primary text-primary-foreground",
+                "hover:bg-primary/90",
+                "transition-gentle"
+              )}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              New Entry
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setPageView('gallery')}
+              className="h-10 w-10"
+              title="Photo Gallery"
+            >
+              <Images className="w-4 h-4" />
+            </Button>
+          </div>
         </header>
 
         {/* Entries List */}
@@ -100,26 +164,28 @@ export function MainPage() {
                 <p className="text-sm text-muted-foreground">No entries yet</p>
               </div>
             ) : (
-              <div className="space-y-1">
-                {entries.map((entry) => (
-                  <button
-                    key={entry.id}
-                    onClick={() => handleEntryClick(entry)}
-                    className={cn(
-                      "w-full text-left p-3 rounded-lg transition-gentle",
-                      "hover:bg-secondary/50",
-                      selectedEntryId === entry.id && "bg-secondary"
-                    )}
-                  >
-                    <h3 className="font-serif text-base text-foreground truncate">
-                      {entry.title}
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {format(new Date(entry.createdAt), 'MMM d, yyyy')}
-                    </p>
-                  </button>
-                ))}
-              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={entries.map((e) => e.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-1">
+                    {entries.map((entry) => (
+                      <DraggableEntryCard
+                        key={entry.id}
+                        entry={entry}
+                        isSelected={selectedEntryId === entry.id}
+                        onClick={() => handleEntryClick(entry)}
+                        variant="sidebar"
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             )}
           </div>
         </ScrollArea>
@@ -142,14 +208,24 @@ export function MainPage() {
                 <InfinityMark className="w-8 h-4 animate-infinity-breathe" tone="pink" />
                 Our Little Infinity
               </h1>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={logout}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <LogOut className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setPageView('gallery')}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Images className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={logout}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <LogOut className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
 
             <Button
@@ -184,29 +260,28 @@ export function MainPage() {
                   </p>
                 </div>
               ) : (
-                entries.map((entry) => (
-                  <button
-                    key={entry.id}
-                    onClick={() => handleEntryClick(entry)}
-                    className={cn(
-                      "w-full text-left p-4 rounded-xl bg-card/50 border border-border/50",
-                      "hover:bg-card hover:border-border hover:shadow-warm",
-                      "transition-gentle"
-                    )}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={entries.map((e) => e.id)}
+                    strategy={verticalListSortingStrategy}
                   >
-                    <h3 className="font-serif text-lg text-foreground">
-                      {entry.title}
-                    </h3>
-                    {entry.description && (
-                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                        {entry.description}
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground/70 mt-2">
-                      {format(new Date(entry.createdAt), 'MMMM d, yyyy')}
-                    </p>
-                  </button>
-                ))
+                    <div className="space-y-3">
+                      {entries.map((entry) => (
+                        <DraggableEntryCard
+                          key={entry.id}
+                          entry={entry}
+                          isSelected={false}
+                          onClick={() => handleEntryClick(entry)}
+                          variant="mobile"
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
               )}
             </div>
           </ScrollArea>
