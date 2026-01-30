@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Photo } from '@/lib/gallery';
 import { cn } from '@/lib/utils';
-import { Maximize2, FolderPlus, X, Download } from 'lucide-react';
+import { Maximize2, FolderPlus, X, Download, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,10 +13,11 @@ import { useAuth } from '@/contexts/AuthContext';
 interface PhotoGridProps {
   photos: Photo[];
   onAddToAlbum?: (photo: Photo) => void;
+  onDeletePhoto?: (photo: Photo) => void;
   showAddToAlbum?: boolean;
 }
 
-export function PhotoGrid({ photos, onAddToAlbum, showAddToAlbum = true }: PhotoGridProps) {
+export function PhotoGrid({ photos, onAddToAlbum, onDeletePhoto, showAddToAlbum = true }: PhotoGridProps) {
   const [expandedPhoto, setExpandedPhoto] = useState<Photo | null>(null);
   const { user } = useAuth();
   const isSarru = user?.username === 'sarru';
@@ -35,6 +36,13 @@ export function PhotoGrid({ photos, onAddToAlbum, showAddToAlbum = true }: Photo
       document.body.removeChild(a);
     } catch (error) {
       console.error('Download failed:', error);
+    }
+  };
+
+  const handleDelete = (photo: Photo) => {
+    if (onDeletePhoto) {
+      onDeletePhoto(photo);
+      setExpandedPhoto(null);
     }
   };
 
@@ -139,7 +147,8 @@ export function PhotoGrid({ photos, onAddToAlbum, showAddToAlbum = true }: Photo
                 Add to album
               </Button>
             )}
-            {isSarru && expandedPhoto && (
+            {/* Download button for all users */}
+            {expandedPhoto && (
               <Button
                 variant="secondary"
                 size="sm"
@@ -148,6 +157,18 @@ export function PhotoGrid({ photos, onAddToAlbum, showAddToAlbum = true }: Photo
               >
                 <Download className="w-4 h-4 mr-2" />
                 Download
+              </Button>
+            )}
+            {/* Delete button for sarru only */}
+            {isSarru && expandedPhoto && onDeletePhoto && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleDelete(expandedPhoto)}
+                className="bg-destructive/80 hover:bg-destructive text-destructive-foreground transition-gentle"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
               </Button>
             )}
           </div>
