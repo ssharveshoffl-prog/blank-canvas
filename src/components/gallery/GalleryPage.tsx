@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Photo, Album, getAllPhotos, getAlbums, getAlbumWithPhotos, uploadPhotoToGallery, AlbumWithPhotos } from '@/lib/gallery';
+import { Photo, Album, getAllPhotos, getAlbums, getAlbumWithPhotos, uploadPhotoToGallery, deletePhoto, AlbumWithPhotos } from '@/lib/gallery';
 import { PhotoGrid } from './PhotoGrid';
 import { AlbumCard } from './AlbumCard';
 import { AlbumPicker } from './AlbumPicker';
@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { ArrowLeft, Plus, ImagePlus, FolderPlus, Loader2, X } from 'lucide-react';
 import { InfinityMark } from '@/components/InfinityMark';
+import { toast } from '@/hooks/use-toast';
 
 type GalleryView = 'all' | 'albums' | 'album-detail';
 
@@ -83,6 +84,28 @@ export function GalleryPage({ onClose }: GalleryPageProps) {
 
   const handleAddToAlbum = (photo: Photo) => {
     setAlbumPickerPhoto(photo);
+  };
+
+  const handleDeletePhoto = async (photo: Photo) => {
+    const success = await deletePhoto(photo);
+    if (success) {
+      toast({
+        title: 'Photo deleted',
+        description: 'The photo has been permanently removed.',
+      });
+      await loadData();
+      // Also refresh album if viewing album detail
+      if (selectedAlbum) {
+        const refreshedAlbum = await getAlbumWithPhotos(selectedAlbum.id);
+        setSelectedAlbum(refreshedAlbum);
+      }
+    } else {
+      toast({
+        title: 'Delete failed',
+        description: 'Could not delete the photo. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleAlbumCreated = async () => {
@@ -189,6 +212,7 @@ export function GalleryPage({ onClose }: GalleryPageProps) {
                 <PhotoGrid
                   photos={photos}
                   onAddToAlbum={handleAddToAlbum}
+                  onDeletePhoto={handleDeletePhoto}
                   showAddToAlbum
                 />
               )}
@@ -227,6 +251,7 @@ export function GalleryPage({ onClose }: GalleryPageProps) {
                 <PhotoGrid
                   photos={selectedAlbum.photos}
                   onAddToAlbum={handleAddToAlbum}
+                  onDeletePhoto={handleDeletePhoto}
                   showAddToAlbum
                 />
               )}

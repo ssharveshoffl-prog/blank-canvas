@@ -8,6 +8,16 @@ import {
   DialogContent,
   DialogClose,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface PhotoGridProps {
@@ -19,6 +29,7 @@ interface PhotoGridProps {
 
 export function PhotoGrid({ photos, onAddToAlbum, onDeletePhoto, showAddToAlbum = true }: PhotoGridProps) {
   const [expandedPhoto, setExpandedPhoto] = useState<Photo | null>(null);
+  const [photoToDelete, setPhotoToDelete] = useState<Photo | null>(null);
   const { user } = useAuth();
   const isSarru = user?.username === 'sarru';
 
@@ -39,9 +50,14 @@ export function PhotoGrid({ photos, onAddToAlbum, onDeletePhoto, showAddToAlbum 
     }
   };
 
-  const handleDelete = (photo: Photo) => {
-    if (onDeletePhoto) {
-      onDeletePhoto(photo);
+  const handleDeleteClick = (photo: Photo) => {
+    setPhotoToDelete(photo);
+  };
+
+  const handleConfirmDelete = () => {
+    if (photoToDelete && onDeletePhoto) {
+      onDeletePhoto(photoToDelete);
+      setPhotoToDelete(null);
       setExpandedPhoto(null);
     }
   };
@@ -164,7 +180,7 @@ export function PhotoGrid({ photos, onAddToAlbum, onDeletePhoto, showAddToAlbum 
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => handleDelete(expandedPhoto)}
+                onClick={() => handleDeleteClick(expandedPhoto)}
                 className="bg-destructive/80 hover:bg-destructive text-destructive-foreground transition-gentle"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
@@ -189,6 +205,36 @@ export function PhotoGrid({ photos, onAddToAlbum, onDeletePhoto, showAddToAlbum 
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!photoToDelete} onOpenChange={(open) => !open && setPhotoToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this photo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the photo from the gallery, all albums, and storage. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {photoToDelete && (
+            <div className="my-4 flex justify-center">
+              <img
+                src={photoToDelete.content}
+                alt={photoToDelete.name}
+                className="max-h-32 rounded-lg object-contain"
+              />
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

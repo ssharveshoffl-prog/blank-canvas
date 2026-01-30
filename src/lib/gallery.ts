@@ -392,3 +392,37 @@ export async function uploadPhotoToGallery(file: File): Promise<Photo | null> {
     createdAt: data.created_at,
   };
 }
+
+// Delete a photo from everywhere (albums + storage + db)
+export async function deletePhoto(photo: Photo): Promise<boolean> {
+  // Remove from all albums first
+  const { error: albumError } = await supabase
+    .from('album_photos')
+    .delete()
+    .eq('block_id', photo.id);
+
+  if (albumError) {
+    console.error('Error removing photo from albums:', albumError);
+  }
+
+  // Delete the file from storage and the block record
+  // Extract path from URL
+  const url = photo.content;
+  const match = url.match(/\/media\/(.+)$/);
+  if (match) {
+    await supabase.storage.from('media').remove([match[1]]);
+  }
+
+  // Delete the block record
+  const { error } = await supabase
+    .from('blocks')
+    .delete()
+    .eq('id', photo.id);
+
+  if (error) {
+    console.error('Error deleting photo block:', error);
+    return false;
+  }
+
+  return true;
+}
