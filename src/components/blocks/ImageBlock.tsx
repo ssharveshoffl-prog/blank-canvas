@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { ImageBlock as ImageBlockType } from '@/lib/entries';
 import { Button } from '@/components/ui/button';
-import { Trash2, Maximize2, X } from 'lucide-react';
+import { Trash2, Maximize2, X, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
   DialogClose,
 } from '@/components/ui/dialog';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ImageBlockProps {
   block: ImageBlockType;
@@ -17,6 +18,25 @@ interface ImageBlockProps {
 
 export function ImageBlock({ block, onDelete, canDelete }: ImageBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const { user } = useAuth();
+  const isSarru = user?.username === 'sarru';
+
+  const handleDownload = async () => {
+    try {
+      const response = await fetch(block.content);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = block.name || 'image';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
 
   return (
     <>
@@ -66,6 +86,20 @@ export function ImageBlock({ block, onDelete, canDelete }: ImageBlockProps) {
           <DialogClose className="absolute right-4 top-4 z-10 rounded-full p-2 bg-background/80 hover:bg-background transition-gentle">
             <X className="h-5 w-5" />
           </DialogClose>
+          
+          {/* Download button for sarru only */}
+          {isSarru && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleDownload}
+              className="absolute left-4 top-4 z-10 bg-background/80 hover:bg-background transition-gentle"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download
+            </Button>
+          )}
+
           <div className="flex items-center justify-center p-4 max-h-[95vh] overflow-auto">
             <img
               src={block.content}
