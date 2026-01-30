@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Photo } from '@/lib/gallery';
 import { cn } from '@/lib/utils';
-import { Maximize2, FolderPlus } from 'lucide-react';
+import { Maximize2, FolderPlus, X, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogClose,
 } from '@/components/ui/dialog';
-import { X } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface PhotoGridProps {
   photos: Photo[];
@@ -18,6 +18,25 @@ interface PhotoGridProps {
 
 export function PhotoGrid({ photos, onAddToAlbum, showAddToAlbum = true }: PhotoGridProps) {
   const [expandedPhoto, setExpandedPhoto] = useState<Photo | null>(null);
+  const { user } = useAuth();
+  const isSarru = user?.username === 'sarru';
+
+  const handleDownload = async (photo: Photo) => {
+    try {
+      const response = await fetch(photo.content);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = photo.name || 'photo';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
 
   if (photos.length === 0) {
     return (
@@ -105,20 +124,33 @@ export function PhotoGrid({ photos, onAddToAlbum, showAddToAlbum = true }: Photo
             <X className="h-5 w-5" />
           </DialogClose>
           
-          {/* Add to album button in fullscreen */}
-          {showAddToAlbum && onAddToAlbum && expandedPhoto && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                onAddToAlbum(expandedPhoto);
-              }}
-              className="absolute left-4 top-4 z-10 bg-background/80 hover:bg-background transition-gentle"
-            >
-              <FolderPlus className="w-4 h-4 mr-2" />
-              Add to album
-            </Button>
-          )}
+          {/* Action buttons in fullscreen */}
+          <div className="absolute left-4 top-4 z-10 flex gap-2">
+            {showAddToAlbum && onAddToAlbum && expandedPhoto && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  onAddToAlbum(expandedPhoto);
+                }}
+                className="bg-background/80 hover:bg-background transition-gentle"
+              >
+                <FolderPlus className="w-4 h-4 mr-2" />
+                Add to album
+              </Button>
+            )}
+            {isSarru && expandedPhoto && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleDownload(expandedPhoto)}
+                className="bg-background/80 hover:bg-background transition-gentle"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download
+              </Button>
+            )}
+          </div>
 
           <div className="flex flex-col items-center justify-center p-4 max-h-[95vh] overflow-auto">
             {expandedPhoto && (
