@@ -20,6 +20,7 @@ export function ImageBlock({ block, onDelete, canDelete }: ImageBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const { user } = useAuth();
   const isSarru = user?.username === 'sarru';
+  const canDeleteImage = canDelete && isSarru;
 
   const handleDownload = async () => {
     try {
@@ -64,7 +65,7 @@ export function ImageBlock({ block, onDelete, canDelete }: ImageBlockProps) {
           </Button>
         </div>
 
-        {canDelete && (
+        {canDeleteImage && (
           <Button
             variant="ghost"
             size="icon"
@@ -87,18 +88,16 @@ export function ImageBlock({ block, onDelete, canDelete }: ImageBlockProps) {
             <X className="h-5 w-5" />
           </DialogClose>
           
-          {/* Download button for sarru only */}
-          {isSarru && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleDownload}
-              className="absolute left-4 top-4 z-10 bg-background/80 hover:bg-background transition-gentle"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Download
-            </Button>
-          )}
+          {/* Download button for all users */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleDownload}
+            className="absolute left-4 top-4 z-10 bg-background/80 hover:bg-background transition-gentle"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download
+          </Button>
 
           <div className="flex items-center justify-center p-4 max-h-[95vh] overflow-auto">
             <img
