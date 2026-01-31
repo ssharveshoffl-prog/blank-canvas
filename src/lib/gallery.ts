@@ -309,7 +309,8 @@ export async function getAlbumsForPhoto(blockId: string): Promise<string[]> {
 }
 
 // Upload photo directly to gallery (not tied to an entry)
-export async function uploadPhotoToGallery(file: File): Promise<Photo | null> {
+// Optionally add directly to an album
+export async function uploadPhotoToGallery(file: File, albumId?: string): Promise<Photo | null> {
   // First we need a "gallery" entry to store standalone photos
   // Check if gallery entry exists, create if not
   let { data: galleryEntry } = await supabase
@@ -383,6 +384,11 @@ export async function uploadPhotoToGallery(file: File): Promise<Photo | null> {
     return null;
   }
 
+  // If albumId provided, add to album
+  if (albumId) {
+    await addPhotoToAlbums(data.id, [albumId]);
+  }
+
   return {
     id: data.id,
     content: data.content,
@@ -391,6 +397,40 @@ export async function uploadPhotoToGallery(file: File): Promise<Photo | null> {
     entryTitle: 'Gallery',
     createdAt: data.created_at,
   };
+}
+
+// Add multiple photos to an album at once
+export async function addMultiplePhotosToAlbum(photoIds: string[], albumId: string): Promise<boolean> {
+  if (photoIds.length === 0) return true;
+
+  // Get current max position for the album
+  const { data: existingPositions } = await supabase
+    .from('album_photos')
+    .select('position')
+    .eq('album_id', albumId)
+    .order('position', { ascending: false })
+    .limit(1);
+
+  let nextPosition = existingPositions && existingPositions.length > 0
+    ? existingPositions[0].position + 1
+    : 0;
+
+  const insertData = photoIds.map((photoId, index) => ({
+    album_id: albumId,
+    block_id: photoId,
+    position: nextPosition + index,
+  }));
+
+  const { error } = await supabase
+    .from('album_photos')
+    .upsert(insertData, { onConflict: 'album_id,block_id' });
+
+  if (error) {
+    console.error('Error adding photos to album:', error);
+    return false;
+  }
+
+  return true;
 }
 
 // Delete a photo from everywhere (albums + storage + db)

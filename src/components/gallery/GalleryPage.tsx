@@ -1,15 +1,27 @@
 import { useState, useEffect, useRef } from 'react';
-import { Photo, Album, getAllPhotos, getAlbums, getAlbumWithPhotos, uploadPhotoToGallery, deletePhoto, AlbumWithPhotos } from '@/lib/gallery';
+import { Photo, Album, getAllPhotos, getAlbums, getAlbumWithPhotos, uploadPhotoToGallery, deletePhoto, deleteAlbum, addMultiplePhotosToAlbum, AlbumWithPhotos } from '@/lib/gallery';
 import { PhotoGrid } from './PhotoGrid';
 import { AlbumCard } from './AlbumCard';
 import { AlbumPicker } from './AlbumPicker';
+import { MultiSelectAlbumPicker } from './MultiSelectAlbumPicker';
 import { CreateAlbumModal } from './CreateAlbumModal';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
-import { ArrowLeft, Plus, ImagePlus, FolderPlus, Loader2, X } from 'lucide-react';
+import { ArrowLeft, Plus, ImagePlus, FolderPlus, Loader2, Trash2, CheckSquare } from 'lucide-react';
 import { InfinityMark } from '@/components/InfinityMark';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 type GalleryView = 'all' | 'albums' | 'album-detail';
 
@@ -18,6 +30,9 @@ interface GalleryPageProps {
 }
 
 export function GalleryPage({ onClose }: GalleryPageProps) {
+  const { user } = useAuth();
+  const isSarru = user?.username === 'sarru';
+  
   const [view, setView] = useState<GalleryView>('all');
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -28,6 +43,14 @@ export function GalleryPage({ onClose }: GalleryPageProps) {
   // Album picker state
   const [albumPickerPhoto, setAlbumPickerPhoto] = useState<Photo | null>(null);
   const [isCreateAlbumOpen, setIsCreateAlbumOpen] = useState(false);
+  
+  // Delete album state
+  const [albumToDelete, setAlbumToDelete] = useState<Album | null>(null);
+  
+  // Multi-select state
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
+  const [isMultiSelectPickerOpen, setIsMultiSelectPickerOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -70,16 +93,77 @@ export function GalleryPage({ onClose }: GalleryPageProps) {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (file.type.startsWith('image/')) {
-        await uploadPhotoToGallery(file);
+        // If in album-detail view, add directly to album
+        await uploadPhotoToGallery(file, selectedAlbum?.id);
       }
     }
     await loadData();
+    // Refresh album if viewing one
+    if (selectedAlbum) {
+      const refreshedAlbum = await getAlbumWithPhotos(selectedAlbum.id);
+      setSelectedAlbum(refreshedAlbum);
+    }
     setIsUploading(false);
     
     // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const handleDeleteAlbum = async () => {
+    if (!albumToDelete) return;
+    
+    const success = await deleteAlbum(albumToDelete.id);
+    if (success) {
+      toast({
+        title: 'Album deleted',
+        description: `"${albumToDelete.name}" has been deleted. Photos are still in your gallery.`,
+      });
+      await loadData();
+    } else {
+      toast({
+        title: 'Delete failed',
+        description: 'Could not delete the album. Please try again.',
+        variant: 'destructive',
+      });
+    }
+    setAlbumToDelete(null);
+  };
+
+  const handleToggleSelectPhoto = (photo: Photo) => {
+    const newSelected = new Set(selectedPhotos);
+    if (newSelected.has(photo.id)) {
+      newSelected.delete(photo.id);
+    } else {
+      newSelected.add(photo.id);
+    }
+    setSelectedPhotos(newSelected);
+  };
+
+  const handleAddSelectedToAlbum = () => {
+    if (selectedPhotos.size === 0) return;
+    setIsMultiSelectPickerOpen(true);
+  };
+
+  const handleMultiSelectComplete = async (albumId: string) => {
+    const photoIds = Array.from(selectedPhotos);
+    const success = await addMultiplePhotosToAlbum(photoIds, albumId);
+    if (success) {
+      toast({
+        title: 'Photos added',
+        description: `${photoIds.length} photo(s) added to album.`,
+      });
+    }
+    setIsMultiSelectPickerOpen(false);
+    setIsMultiSelectMode(false);
+    setSelectedPhotos(new Set());
+    await loadData();
+  };
+
+  const exitMultiSelectMode = () => {
+    setIsMultiSelectMode(false);
+    setSelectedPhotos(new Set());
   };
 
   const handleAddToAlbum = (photo: Photo) => {
@@ -150,34 +234,73 @@ export function GalleryPage({ onClose }: GalleryPageProps) {
               className="hidden"
               onChange={handleFileSelect}
             />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-            >
-              {isUploading ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <ImagePlus className="w-4 h-4 mr-2" />
-              )}
-              Add photo
-            </Button>
-            {view !== 'album-detail' && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsCreateAlbumOpen(true)}
-              >
-                <FolderPlus className="w-4 h-4 mr-2" />
-                New album
-              </Button>
+            
+            {/* Multi-select mode controls */}
+            {isMultiSelectMode ? (
+              <>
+                <span className="text-sm text-muted-foreground">
+                  {selectedPhotos.size} selected
+                </span>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleAddSelectedToAlbum}
+                  disabled={selectedPhotos.size === 0}
+                >
+                  <FolderPlus className="w-4 h-4 mr-2" />
+                  Add to album
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={exitMultiSelectMode}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                {/* Multi-select button for All Photos view */}
+                {view === 'all' && photos.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsMultiSelectMode(true)}
+                  >
+                    <CheckSquare className="w-4 h-4 mr-2" />
+                    Select
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                >
+                  {isUploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <ImagePlus className="w-4 h-4 mr-2" />
+                  )}
+                  {view === 'album-detail' ? 'Add to album' : 'Add photo'}
+                </Button>
+                {view !== 'album-detail' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsCreateAlbumOpen(true)}
+                  >
+                    <FolderPlus className="w-4 h-4 mr-2" />
+                    New album
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>
 
-        {/* Tab navigation (only show when not in album detail) */}
-        {view !== 'album-detail' && (
+        {/* Tab navigation (only show when not in album detail and not in multi-select) */}
+        {view !== 'album-detail' && !isMultiSelectMode && (
           <div className="flex gap-1 mt-4">
             <Button
               variant={view === 'all' ? 'secondary' : 'ghost'}
@@ -213,7 +336,10 @@ export function GalleryPage({ onClose }: GalleryPageProps) {
                   photos={photos}
                   onAddToAlbum={handleAddToAlbum}
                   onDeletePhoto={handleDeletePhoto}
-                  showAddToAlbum
+                  showAddToAlbum={!isMultiSelectMode}
+                  isMultiSelectMode={isMultiSelectMode}
+                  selectedPhotos={selectedPhotos}
+                  onToggleSelect={handleToggleSelectPhoto}
                 />
               )}
 
@@ -240,6 +366,7 @@ export function GalleryPage({ onClose }: GalleryPageProps) {
                           key={album.id}
                           album={album}
                           onClick={() => handleOpenAlbum(album)}
+                          onDelete={isSarru ? () => setAlbumToDelete(album) : undefined}
                         />
                       ))}
                     </div>
@@ -278,6 +405,35 @@ export function GalleryPage({ onClose }: GalleryPageProps) {
         isOpen={isCreateAlbumOpen}
         onClose={() => setIsCreateAlbumOpen(false)}
         onCreated={handleAlbumCreated}
+      />
+
+      {/* Delete album confirmation */}
+      <AlertDialog open={!!albumToDelete} onOpenChange={(open) => !open && setAlbumToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete album "{albumToDelete?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete the album. Your photos will remain in the gallery and won't be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAlbum}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete album
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Multi-select album picker */}
+      <MultiSelectAlbumPicker
+        isOpen={isMultiSelectPickerOpen}
+        onClose={() => setIsMultiSelectPickerOpen(false)}
+        onSelectAlbum={handleMultiSelectComplete}
+        photoCount={selectedPhotos.size}
       />
     </div>
   );
