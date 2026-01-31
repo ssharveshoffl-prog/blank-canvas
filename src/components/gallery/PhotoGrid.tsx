@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Photo } from '@/lib/gallery';
 import { cn } from '@/lib/utils';
-import { Maximize2, FolderPlus, X, Download, Trash2 } from 'lucide-react';
+import { Maximize2, FolderPlus, X, Download, Trash2, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -25,9 +25,20 @@ interface PhotoGridProps {
   onAddToAlbum?: (photo: Photo) => void;
   onDeletePhoto?: (photo: Photo) => void;
   showAddToAlbum?: boolean;
+  isMultiSelectMode?: boolean;
+  selectedPhotos?: Set<string>;
+  onToggleSelect?: (photo: Photo) => void;
 }
 
-export function PhotoGrid({ photos, onAddToAlbum, onDeletePhoto, showAddToAlbum = true }: PhotoGridProps) {
+export function PhotoGrid({ 
+  photos, 
+  onAddToAlbum, 
+  onDeletePhoto, 
+  showAddToAlbum = true,
+  isMultiSelectMode = false,
+  selectedPhotos = new Set(),
+  onToggleSelect,
+}: PhotoGridProps) {
   const [expandedPhoto, setExpandedPhoto] = useState<Photo | null>(null);
   const [photoToDelete, setPhotoToDelete] = useState<Photo | null>(null);
   const { user } = useAuth();
@@ -79,66 +90,92 @@ export function PhotoGrid({ photos, onAddToAlbum, onDeletePhoto, showAddToAlbum 
   return (
     <>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-        {photos.map((photo) => (
-          <div
-            key={photo.id}
-            className={cn(
-              "group relative aspect-square overflow-hidden rounded-xl",
-              "bg-secondary/30 cursor-pointer",
-              "transition-gentle hover:shadow-warm"
-            )}
-            onClick={() => setExpandedPhoto(photo)}
-          >
-            <img
-              src={photo.content}
-              alt={photo.name}
+        {photos.map((photo) => {
+          const isSelected = selectedPhotos.has(photo.id);
+          
+          return (
+            <div
+              key={photo.id}
               className={cn(
-                "w-full h-full object-cover",
-                "transition-gentle group-hover:scale-105"
+                "group relative aspect-square overflow-hidden rounded-xl",
+                "bg-secondary/30 cursor-pointer",
+                "transition-gentle hover:shadow-warm",
+                isMultiSelectMode && isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
               )}
-              loading="lazy"
-            />
+              onClick={() => {
+                if (isMultiSelectMode && onToggleSelect) {
+                  onToggleSelect(photo);
+                } else {
+                  setExpandedPhoto(photo);
+                }
+              }}
+            >
+              <img
+                src={photo.content}
+                alt={photo.name}
+                className={cn(
+                  "w-full h-full object-cover",
+                  "transition-gentle group-hover:scale-105"
+                )}
+                loading="lazy"
+              />
 
-            {/* Hover overlay */}
-            <div className={cn(
-              "absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent",
-              "opacity-0 group-hover:opacity-100 transition-gentle"
-            )}>
-              {/* Action buttons */}
-              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-                <p className="text-xs text-white/90 font-sans truncate max-w-[60%]">
-                  {photo.entryTitle !== '__gallery__' ? photo.entryTitle : 'Gallery'}
-                </p>
-                <div className="flex gap-1">
-                  {showAddToAlbum && onAddToAlbum && (
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="w-7 h-7 bg-white/20 backdrop-blur-sm hover:bg-white/40 border-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddToAlbum(photo);
-                      }}
-                    >
-                      <FolderPlus className="w-3.5 h-3.5 text-white" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    className="w-7 h-7 bg-white/20 backdrop-blur-sm hover:bg-white/40 border-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setExpandedPhoto(photo);
-                    }}
-                  >
-                    <Maximize2 className="w-3.5 h-3.5 text-white" />
-                  </Button>
+              {/* Multi-select checkbox overlay */}
+              {isMultiSelectMode && (
+                <div className={cn(
+                  "absolute top-2 left-2 w-6 h-6 rounded-full",
+                  "flex items-center justify-center",
+                  isSelected 
+                    ? "bg-primary text-primary-foreground" 
+                    : "bg-background/80 border-2 border-muted-foreground/50"
+                )}>
+                  {isSelected && <Check className="w-4 h-4" />}
                 </div>
-              </div>
+              )}
+
+              {/* Hover overlay (only show when not in multi-select mode) */}
+              {!isMultiSelectMode && (
+                <div className={cn(
+                  "absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent",
+                  "opacity-0 group-hover:opacity-100 transition-gentle"
+                )}>
+                  {/* Action buttons */}
+                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+                    <p className="text-xs text-white/90 font-sans truncate max-w-[60%]">
+                      {photo.entryTitle !== '__gallery__' ? photo.entryTitle : 'Gallery'}
+                    </p>
+                    <div className="flex gap-1">
+                      {showAddToAlbum && onAddToAlbum && (
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="w-7 h-7 bg-white/20 backdrop-blur-sm hover:bg-white/40 border-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddToAlbum(photo);
+                          }}
+                        >
+                          <FolderPlus className="w-3.5 h-3.5 text-white" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="w-7 h-7 bg-white/20 backdrop-blur-sm hover:bg-white/40 border-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedPhoto(photo);
+                        }}
+                      >
+                        <Maximize2 className="w-3.5 h-3.5 text-white" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Fullscreen photo dialog */}
